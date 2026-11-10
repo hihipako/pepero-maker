@@ -285,7 +285,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
         <label class="switch"><input type="checkbox" id="spinToggle"> 천천히 빙글빙글 돌리기</label>
         <div class="sep"></div>
         <p class="group-title">보내기</p>
-        <p class="hint">링크를 받은 사람도 같은 선물을 3D로 돌려 볼 수 있어요. 사진은 링크에 작게 담겨요.</p>
+        <p class="hint">링크를 받은 사람도 같은 선물을 3D로 돌려 볼 수 있어요.</p>
+        <label class="switch" id="photoInLinkRow" hidden><input type="checkbox" id="photoInLink"> 사진도 링크에 넣기 (링크가 많이 길어져요)</label>
         <div class="actions" style="margin-top:0">
           <button class="btn primary" id="linkBtn" type="button">공유 링크 복사</button>
           <button class="btn" id="shareBtn" type="button" hidden>다른 앱으로 보내기</button>
@@ -1166,6 +1167,7 @@ function syncUI(){
   document.querySelectorAll('.photo-thumb').forEach(img => { img.hidden = !S.photo.src; if (S.photo.src && img.src !== S.photo.src) img.src = S.photo.src; });
   document.querySelectorAll('.photo-empty').forEach(p => p.textContent = S.photo.src ? '올린 사진을 쓰고 있어요. 다른 사진으로 바꿀 수도 있어요.' : p.dataset.empty || p.textContent);
   document.querySelectorAll('[data-upload]').forEach(l => l.textContent = S.photo.src ? '사진 바꾸기' : '사진 올리기');
+  $('photoInLinkRow').hidden = !S.photo.src;
 }
 
 /* ---------- uploads ---------- */
@@ -1230,15 +1232,25 @@ $('resetBtn').addEventListener('click', () => {
 });
 $('camReset').addEventListener('click', () => flyTo(viewName()));
 
+// Only what differs from the defaults goes into the link; merge() fills the rest back in.
+function diffFrom(cur, def){
+  if (Array.isArray(cur)){ const out = cur.map((c, i) => diffFrom(c, def ? def[i] : undefined)); return out.some(x => x !== undefined) ? out.map(x => x === undefined ? 0 : x) : undefined; }
+  if (cur && typeof cur === 'object'){ const out = {}; let any = false; for (const k in cur){ const d = diffFrom(cur[k], def ? def[k] : undefined); if (d !== undefined){ out[k] = d; any = true; } } return any ? out : undefined; }
+  return cur === def ? undefined : cur;
+}
 function shareLink(){
   const base = /github\.io$/.test(location.hostname) ? location.origin + location.pathname : SHARE_BASE;
-  return base + '#g=' + LZString.compressToEncodedURIComponent(JSON.stringify(S));
+  const data = diffFrom(S, defaults()) || {};
+  if (data.photo && !$('photoInLink').checked){ delete data.photo.src; if (!Object.keys(data.photo).length) delete data.photo; }
+  return base + '#g=' + LZString.compressToEncodedURIComponent(JSON.stringify(data));
 }
 $('linkBtn').addEventListener('click', () => {
   const url = shareLink();
   $('shareUrl').value = url; $('shareBox').hidden = false;
+  $('photoInLink').onchange = () => { $('shareUrl').value = shareLink(); };
   const fallback = () => { $('shareUrl').focus(); $('shareUrl').select(); note('복사가 안 되면 위 주소를 직접 복사해 주세요.'); };
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(() => note('링크를 복사했어요. 메신저에 붙여 넣어 보내세요.'), fallback);
+  const tail = S.photo.src && !$('photoInLink').checked ? ' 사진은 빼고 담았어요.' : '';
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(() => note('링크를 복사했어요. 메신저에 붙여 넣어 보내세요.' + tail), fallback);
   else fallback();
 });
 if (navigator.share){
